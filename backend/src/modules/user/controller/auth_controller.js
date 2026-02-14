@@ -76,16 +76,46 @@ exports.register = asyncHandler(async (req, res) => {
   });
 });
 
-exports.login = async (req, res) => {
-  const { email, password } = req.body;
+exports.login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    if (!email) {
+      return next(new AppError("Email is required", 400));
+    }
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+    if (!password) {
+      return next(new AppError("Password is required", 400));
+    }
 
-  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+    const user = await User.findOne({ email });
 
-  res.json({ token });
+    if (!user) {
+      return next(new AppError("Invalid credentials", 400));
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return next(new AppError("Invalid credentials", 400));
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    user.password = undefined;
+    user.role = undefined;
+
+    res.status(200).json({
+      success: true,
+      user: user,
+      message: "Login successful",
+      data: {
+        token,
+      },
+    });
+  } catch (error) {
+    next(error); // 🔥 send to error middleware
+  }
 };
